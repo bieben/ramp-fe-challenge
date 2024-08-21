@@ -6,17 +6,19 @@ import { useEmployees } from "./hooks/useEmployees"
 import { usePaginatedTransactions } from "./hooks/usePaginatedTransactions"
 import { useTransactionsByEmployee } from "./hooks/useTransactionsByEmployee"
 import { EMPTY_EMPLOYEE } from "./utils/constants"
-import { Employee } from "./utils/types"
+import { Employee, Transaction } from "./utils/types"
 
 export function App() {
   const { data: employees, ...employeeUtils } = useEmployees()
   const { data: paginatedTransactions, ...paginatedTransactionsUtils } = usePaginatedTransactions()
   const { data: transactionsByEmployee, ...transactionsByEmployeeUtils } = useTransactionsByEmployee()
   const [isLoading, setIsLoading] = useState(false)
+  const [isEmployeeLoading, setIsEmployeeLoading] = useState(false)
+  const [allTransactions, setAllTransactions] = useState<Transaction[]>([])
 
   const transactions = useMemo(
-    () => paginatedTransactions?.data ?? transactionsByEmployee ?? null,
-    [paginatedTransactions, transactionsByEmployee]
+    () => allTransactions.length > 0 ? allTransactions : transactionsByEmployee,
+    [allTransactions, transactionsByEmployee]
   )
 
   const loadAllTransactions = useCallback(async () => {
@@ -32,10 +34,42 @@ export function App() {
   const loadTransactionsByEmployee = useCallback(
     async (employeeId: string) => {
       paginatedTransactionsUtils.invalidateData()
+      
+      setAllTransactions([])
       await transactionsByEmployeeUtils.fetchById(employeeId)
+      
     },
     [paginatedTransactionsUtils, transactionsByEmployeeUtils]
   )
+
+  const loadEmployees = useCallback(async () => {
+    setIsEmployeeLoading(true);
+    await employeeUtils.fetchAll();
+    setIsEmployeeLoading(false);
+  }, [employeeUtils]);
+
+  useEffect(() => {
+    loadEmployees();
+  }, []);
+
+  useEffect(() => {
+    if (paginatedTransactions?.data) {
+      setAllTransactions((prevTransactions) => [
+        ...prevTransactions,
+        ...paginatedTransactions.data,
+      ]);
+    }
+  }, [paginatedTransactions]);
+
+  useEffect(() => {
+    if (transactionsByEmployee) {
+      setAllTransactions((prevTransactions) => [
+        ...prevTransactions,
+        ...transactionsByEmployee,
+      ]);
+    }
+    
+  }, [transactionsByEmployee]);
 
   useEffect(() => {
     if (employees === null && !employeeUtils.loading) {
@@ -51,7 +85,7 @@ export function App() {
         <hr className="RampBreak--l" />
 
         <InputSelect<Employee>
-          isLoading={isLoading}
+          isLoading={isEmployeeLoading}
           defaultValue={EMPTY_EMPLOYEE}
           items={employees === null ? [] : [EMPTY_EMPLOYEE, ...employees]}
           label="Filter by employee"
@@ -61,11 +95,12 @@ export function App() {
             label: `${item.firstName} ${item.lastName}`,
           })}
           onChange={async (newValue) => {
-            if (newValue === null) {
-              return
+            setAllTransactions([])
+            if (!newValue || newValue.id === "all") {
+              await loadAllTransactions()
+            } else {
+              await loadTransactionsByEmployee(newValue.id)
             }
-
-            await loadTransactionsByEmployee(newValue.id)
           }}
         />
 
@@ -77,10 +112,12 @@ export function App() {
           {transactions !== null && (
             <button
               className="RampButton"
-              disabled={paginatedTransactionsUtils.loading}
+              disabled={paginatedTransactionsUtils.loading || !paginatedTransactions?.nextPage}
+              style={{ display: paginatedTransactions?.nextPage ? 'block' : 'none' }}
               onClick={async () => {
-                await loadAllTransactions()
-              }}
+                  await loadAllTransactions();
+                }
+              }
             >
               View More
             </button>

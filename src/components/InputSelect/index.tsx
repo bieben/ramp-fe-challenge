@@ -20,12 +20,15 @@ export function InputSelect<TItem>({
 
   const onChange = useCallback<InputSelectOnChange<TItem>>(
     (selectedItem) => {
-      if (selectedItem === null) {
-        return
+      if (selectedItem === null || selectedItem === "all") {
+        setSelectedValue(null)
+        consumerOnChange(null)
+      } else if (selectedItem && parseItem(selectedItem).value) {
+        consumerOnChange(selectedItem)
+        setSelectedValue(selectedItem)
+      } else {
+        console.error("Invalid employee selection:", selectedItem)
       }
-
-      consumerOnChange(selectedItem)
-      setSelectedValue(selectedItem)
     },
     [consumerOnChange]
   )
